@@ -17,42 +17,52 @@ import {
   DialogTitle,
   Chip,
   Box,
-  Alert
+  Alert,
+  List,
+  ListItem,
+  ListItemText,
+  Divider
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import LockIcon from '@mui/icons-material/Lock';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
+import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
 
-function FileList({ files, onDelete, onDownload, userWallet }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
+const FileList = ({ files, onDelete, onDownload, userWallet, agreements }) => {
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleDeleteClick = (file) => {
+  const handleDeleteConfirm = (file) => {
     setSelectedFile(file);
-    setConfirmDelete(true);
+    setDeleteConfirmOpen(true);
   };
 
-  const handleConfirmDelete = async () => {
-    if (!selectedFile) return;
-    
-    try {
-      await onDelete(selectedFile.file_id);
-      setConfirmDelete(false);
-      setSelectedFile(null);
-    } catch (error) {
-      setError(error.message || 'Failed to delete file');
-    }
-  };
-
-  const handleCancelDelete = () => {
-    setConfirmDelete(false);
+  const handleDeleteCancel = () => {
+    setDeleteConfirmOpen(false);
     setSelectedFile(null);
   };
 
+  const handleDeleteFile = async () => {
+    if (!selectedFile) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      await onDelete(selectedFile.file_id);
+      setDeleteConfirmOpen(false);
+      setSelectedFile(null);
+    } catch (err) {
+      setError(err.message || 'Failed to delete file');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatSize = (bytes) => {
-    if (!bytes) return '0 Bytes';
+    if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -64,123 +74,211 @@ function FileList({ files, onDelete, onDownload, userWallet }) {
     return new Date(timestamp * 1000).toLocaleString();
   };
 
+  // Group files by storage type (rented or standard)
+  const standardFiles = files.filter(file => !file.agreement_id);
+  const rentedFiles = files.filter(file => file.agreement_id);
+
+  // Check if a file is owned by the current user
   const isOwner = (file) => {
-    if (!userWallet || !file.owner) return false;
-    return userWallet.address.toLowerCase() === file.owner.toLowerCase();
+    if (!userWallet) return false;
+    return file.owner === userWallet.address;
+  };
+
+  // Find agreement details for a file
+  const getAgreementDetails = (agreementId) => {
+    if (!agreements) return null;
+    return agreements.find(agreement => agreement.agreement_id === agreementId);
   };
 
   return (
-    <>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      
-      <Typography variant="h5" component="h2" gutterBottom>
+    <Box>
+      <Typography variant="h5" gutterBottom>
         Your Files
       </Typography>
 
       {files.length === 0 ? (
-        <Typography variant="body1" color="textSecondary" sx={{ my: 4, textAlign: 'center' }}>
-          No files found. Upload your first file to get started!
-        </Typography>
+        <Alert severity="info">
+          No files found. Upload some files to get started.
+        </Alert>
       ) : (
-        <TableContainer component={Paper}>
-          <Table sx={{ minWidth: 650 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Filename</TableCell>
-                <TableCell align="right">Size</TableCell>
-                <TableCell align="right">Date</TableCell>
-                <TableCell align="right">Security</TableCell>
-                <TableCell align="right">Owner</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {files.map((file) => (
-                <TableRow key={file.file_id}>
-                  <TableCell component="th" scope="row">
-                    {file.filename}
-                  </TableCell>
-                  <TableCell align="right">{formatSize(file.size)}</TableCell>
-                  <TableCell align="right">{formatDate(file.created_at)}</TableCell>
-                  <TableCell align="right">
-                    {file.encryption === 'aes' ? (
-                      <Chip 
-                        icon={<LockIcon />} 
-                        label="Encrypted" 
-                        color="success" 
-                        variant="outlined" 
-                      />
-                    ) : (
-                      <Chip 
-                        icon={<LockOpenIcon />} 
-                        label="Not Encrypted" 
-                        color="warning" 
-                        variant="outlined" 
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    {file.owner === 'anonymous' ? (
-                      'Anonymous'
-                    ) : (
-                      <Chip 
-                        label={file.owner.substring(0, 6) + '...' + file.owner.substring(file.owner.length - 4)} 
-                        size="small" 
-                        color={isOwner(file) ? "primary" : "default"}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Box>
-                      <IconButton 
-                        color="primary" 
-                        onClick={() => onDownload(file.file_id)} 
-                        title="Download"
-                      >
-                        <DownloadIcon />
-                      </IconButton>
-                      
-                      {(file.owner === 'anonymous' || isOwner(file)) && (
-                        <IconButton 
-                          color="error" 
-                          onClick={() => handleDeleteClick(file)} 
-                          title="Delete"
+        <>
+          {rentedFiles.length > 0 && (
+            <Box mb={3}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <FolderSpecialIcon sx={{ mr: 1 }} /> Files in Rented Storage
+              </Typography>
+              <Paper variant="outlined">
+                <List>
+                  {rentedFiles.map((file, index) => {
+                    const agreementDetails = getAgreementDetails(file.agreement_id);
+                    return (
+                      <React.Fragment key={file.file_id}>
+                        {index > 0 && <Divider />}
+                        <ListItem
+                          secondaryAction={
+                            <Box>
+                              <IconButton 
+                                edge="end" 
+                                onClick={() => onDownload(file.file_id)}
+                                title="Download file"
+                              >
+                                <DownloadIcon />
+                              </IconButton>
+                              {isOwner(file) && (
+                                <IconButton 
+                                  edge="end" 
+                                  onClick={() => handleDeleteConfirm(file)}
+                                  title="Delete file"
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              )}
+                            </Box>
+                          }
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                {file.filename}
+                                <Chip 
+                                  icon={<LockIcon />} 
+                                  label="Encrypted" 
+                                  size="small" 
+                                  color="primary" 
+                                  variant="outlined"
+                                  sx={{ ml: 1 }}
+                                />
+                              </Box>
+                            }
+                            secondary={
+                              <>
+                                <Typography component="span" variant="body2" color="text.primary">
+                                  Size: {formatSize(file.size)}
+                                </Typography>
+                                <br />
+                                <Typography component="span" variant="body2">
+                                  Uploaded: {formatDate(file.created_at)}
+                                </Typography>
+                                <br />
+                                <Typography component="span" variant="body2">
+                                  Storage: {file.agreement_id} 
+                                  {agreementDetails && ` (${agreementDetails.size_mb}MB)`}
+                                </Typography>
+                              </>
+                            }
+                          />
+                        </ListItem>
+                      </React.Fragment>
+                    );
+                  })}
+                </List>
+              </Paper>
+            </Box>
+          )}
+
+          {standardFiles.length > 0 && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Files in Standard Storage
+              </Typography>
+              <Paper variant="outlined">
+                <List>
+                  {standardFiles.map((file, index) => (
+                    <React.Fragment key={file.file_id}>
+                      {index > 0 && <Divider />}
+                      <ListItem
+                        secondaryAction={
+                          <Box>
+                            <IconButton 
+                              edge="end" 
+                              onClick={() => onDownload(file.file_id)}
+                              title="Download file"
+                            >
+                              <DownloadIcon />
+                            </IconButton>
+                            {isOwner(file) && (
+                              <IconButton 
+                                edge="end" 
+                                onClick={() => handleDeleteConfirm(file)}
+                                title="Delete file"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            )}
+                          </Box>
+                        }
+                      >
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              {file.filename}
+                              {file.encryption === 'aes' && (
+                                <Chip 
+                                  icon={<LockIcon />} 
+                                  label="Encrypted" 
+                                  size="small" 
+                                  color="primary" 
+                                  variant="outlined"
+                                  sx={{ ml: 1 }}
+                                />
+                              )}
+                            </Box>
+                          }
+                          secondary={
+                            <>
+                              <Typography component="span" variant="body2" color="text.primary">
+                                Size: {formatSize(file.size)}
+                              </Typography>
+                              <br />
+                              <Typography component="span" variant="body2">
+                                Uploaded: {formatDate(file.created_at)}
+                              </Typography>
+                              <br />
+                              <Typography component="span" variant="body2">
+                                {file.chunks && file.chunks.length > 0 ? 
+                                  `Stored across ${file.chunks.length} chunks` : 
+                                  'Storage information not available'}
+                              </Typography>
+                            </>
+                          }
+                        />
+                      </ListItem>
+                    </React.Fragment>
+                  ))}
+                </List>
+              </Paper>
+            </Box>
+          )}
+        </>
       )}
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
-        open={confirmDelete}
-        onClose={handleCancelDelete}
+        open={deleteConfirmOpen}
+        onClose={handleDeleteCancel}
       >
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the file "{selectedFile?.filename}"? 
-            This action cannot be undone.
+            Are you sure you want to delete "{selectedFile?.filename}"? This action cannot be undone.
           </DialogContentText>
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={handleConfirmDelete} color="error" autoFocus>
-            Delete
+          <Button onClick={handleDeleteCancel} disabled={loading}>Cancel</Button>
+          <Button 
+            onClick={handleDeleteFile} 
+            variant="contained" 
+            color="error"
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Box>
   );
-}
+};
 
 export default FileList; 
