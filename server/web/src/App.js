@@ -12,7 +12,10 @@ import StorageMarket from './components/StorageMarket';
 import SellerDashboard from './components/SellerDashboard';
 
 // API URL
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002';
+// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002';
+const API_URLs = 'http://172.31.112.248:5001';
+const API_URL = 'http://172.31.112.248:5002';
+
 
 // Create a theme
 const theme = createTheme({
@@ -65,7 +68,7 @@ function App() {
 
   const fetchNodes = async () => {
     try {
-      const response = await fetch(`${API_URL}/all_nodes`);
+      const response = await fetch(`${API_URLs}/all_nodes`);
       if (response.ok) {
         const data = await response.json();
         setNodes(data);
@@ -115,7 +118,7 @@ function App() {
       if (agreementId) {
         formData.append('agreement_id', agreementId);
       }
-
+      console.log('Uploading file:', file);
       const response = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData,

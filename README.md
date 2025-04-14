@@ -219,3 +219,11 @@ MIT
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+
+
+client__app.py 5002
+
+coordinator__app.py 5001
+storage_node__app.py 6000
+```
