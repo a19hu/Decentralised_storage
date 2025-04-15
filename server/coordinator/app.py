@@ -76,6 +76,20 @@ def register():
 
     return jsonify({'status': 'registered', 'node_id': node_id}), 200
 
+@app.route('/deregister', methods=['POST'])
+def deregister():
+    data = request.json
+    node_id = data.get('node_id')
+    
+    if not node_id:
+        return jsonify({'error': 'Missing node_id'}), 400
+    
+    if node_id in nodes:
+        del nodes[node_id]
+        return jsonify({'status': 'deregistered', 'node_id': node_id}), 200
+    else:
+        return jsonify({'error': 'Node not found', 'node_id': node_id}), 404
+
 @app.route('/available_nodes', methods=['GET'])
 def available_nodes():
     # Show nodes that have available space (either regular or locked)

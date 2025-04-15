@@ -5,7 +5,7 @@ services:
   storage1:
     build: ./storage_node
     environment:
-      - NODE_ID=node3
+      - NODE_ID=ashu
       - STORAGE_LIMIT_MB=1000
       - COORDINATOR_URL=http://172.31.112.248:5001
       - HOST_IP=172.31.112.248

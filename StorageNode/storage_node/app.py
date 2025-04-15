@@ -11,6 +11,9 @@ import base64
 import shutil
 import stat
 from web3 import Web3
+import atexit
+import signal
+import sys
 
 app = Flask(__name__)
 CORS(app)
@@ -355,6 +358,18 @@ def update_used_space():
     })
     return res.json()
 
+def deregister_from_coordinator():
+    """Deregister this node from the coordinator"""
+    try:
+        res = requests.post(f'{COORDINATOR_URL}/deregister', json={
+            'node_id': NODE_ID
+        })
+        print(f'Deregistered from coordinator: {res.json() if res.ok else res.text}')
+        return res.json() if res.ok else None
+    except Exception as e:
+        print('Coordinator deregistration failed:', e)
+        return None
+
 def register_with_coordinator():
     """Initial registration with the coordinator"""
     try:
@@ -362,6 +377,18 @@ def register_with_coordinator():
         print('Registered with coordinator')
     except Exception as e:
         print('Coordinator registration failed:', e)
+
+# Register a shutdown hook to deregister when the container stops
+def shutdown_handler(signum=None, frame=None):
+    """Handle graceful shutdown and deregister from coordinator"""
+    print("Shutting down storage node...")
+    deregister_from_coordinator()
+    sys.exit(0)
+
+# Register shutdown handlers
+atexit.register(deregister_from_coordinator)
+signal.signal(signal.SIGTERM, shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
 
 if __name__ == '__main__':
     register_with_coordinator()
