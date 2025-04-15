@@ -183,13 +183,14 @@ const FileList = ({ files, onDelete, onDownload, userWallet, agreements }) => {
                       <ListItem
                         secondaryAction={
                           <Box>
+                          {isOwner(file) && (
                             <IconButton 
                               edge="end" 
                               onClick={() => onDownload(file.file_id)}
                               title="Download file"
                             >
                               <DownloadIcon />
-                            </IconButton>
+                            </IconButton> )}
                             {isOwner(file) && (
                               <IconButton 
                                 edge="end" 
