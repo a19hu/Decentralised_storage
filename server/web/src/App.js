@@ -6,15 +6,13 @@ import NodeStatus from './components/NodeStatus';
 import WalletConnection from './components/WalletConnection';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-
-// Import new components
 import StorageMarket from './components/StorageMarket';
 import SellerDashboard from './components/SellerDashboard';
 
-// API URL
-// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002';
-const API_URLs = 'http://172.31.112.248:5001';
-const API_URL = 'http://172.31.112.248:5002';
+
+const SERVER_IP = process.env.REACT_APP_SERVER_IP  || '10.6.0.63';
+const API_URLs = `http://${SERVER_IP}:5001`;
+const API_URL = `http://${SERVER_IP}:5002`;
 
 
 // Create a theme

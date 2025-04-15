@@ -18,11 +18,19 @@ import sys
 app = Flask(__name__)
 CORS(app)
 
+WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 NODE_ID = os.getenv('NODE_ID', 'node_default')
-STORAGE_PATH = './storage'
-LOCKED_STORAGE_PATH = './locked_storage'  # Directory for storage that is locked for rental
 STORAGE_LIMIT_MB = int(os.getenv('STORAGE_LIMIT_MB', '1024'))  # default 1GB
 PRICE_PER_MB = int(os.getenv('PRICE_PER_MB', '1'))  # price in wei per MB per day
+host_ip = os.getenv('HOST_IP', 'localhost')
+port = os.getenv('PORT', '6000')
+
+
+
+COORDINATOR_URL ='http://10.6.0.63:5001'
+BLOCKCHAIN_URL = 'http://10.6.0.63:8545'
+STORAGE_PATH = './storage'
+LOCKED_STORAGE_PATH = './locked_storage'  # Directory for storage that is locked for rental
 
 # Create storage directories if they don't exist
 if not os.path.exists(STORAGE_PATH):
@@ -31,9 +39,7 @@ if not os.path.exists(STORAGE_PATH):
 if not os.path.exists(LOCKED_STORAGE_PATH):
     os.makedirs(LOCKED_STORAGE_PATH)
 
-COORDINATOR_URL = os.getenv('COORDINATOR_URL', 'http://coordinator:5001')
-BLOCKCHAIN_URL = os.getenv('BLOCKCHAIN_URL', 'http://blockchain:8545')
-WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
+
 # WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', '')
 
 # Initialize Web3
@@ -349,8 +355,7 @@ def update_used_space():
     locked = get_locked_space_mb()
     
     # Get the host IP from environment variable or use localhost
-    host_ip = os.getenv('HOST_IP', 'localhost')
-    port = os.getenv('PORT', '6000')
+
     
     res = requests.post(f'{COORDINATOR_URL}/register', json={
         'node_id': NODE_ID,
