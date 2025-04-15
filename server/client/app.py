@@ -16,25 +16,45 @@ import base64
 app = Flask(__name__)
 CORS(app)
 
-COORDINATOR_URL = os.getenv('COORDINATOR_URL', 'http://coordinator:5001')
-BLOCKCHAIN_URL = os.getenv('BLOCKCHAIN_URL', 'http://blockchain:8545')
+COORDINATOR_URL = os.getenv('COORDINATOR_URL', 'http://localhost:5001')
+BLOCKCHAIN_URL = os.getenv('BLOCKCHAIN_URL', 'http://localhost:8545')
 TEMP_DIR = './temp'
 
 if not os.path.exists(TEMP_DIR):
-    os.makedirs(TEMP_DIR)
+    try:
+        os.makedirs(TEMP_DIR)
+        print(f"Created temp directory: {TEMP_DIR}")
+    except Exception as e:
+        print(f"Error creating temp directory: {e}")
+        raise
 
 # Initialize Web3
-w3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_URL))
+web3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_URL))
 
-# Load contract if ABI is available
-CONTRACT_ABI_PATH = 'contract_abi.json'
-CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS', '')
+CONTRACT_ABI_PATH ='../coordinator/data/contract_abi.json'
+CONTRACT_ADDRESS_FILE ='../coordinator/data/contract_address.txt'
 contract = None
+CONTRACT_ADDRESS = ''
 
-if os.path.exists(CONTRACT_ABI_PATH) and CONTRACT_ADDRESS:
-    with open(CONTRACT_ABI_PATH, 'r') as f:
-        contract_abi = json.load(f)
-    contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
+# Read contract address from file if it exists
+if os.path.exists(CONTRACT_ADDRESS_FILE):
+    try:
+        with open(CONTRACT_ADDRESS_FILE, 'r') as f:
+            CONTRACT_ADDRESS = f.read().strip()
+        print(f"Loaded contract address: {CONTRACT_ADDRESS}")
+    except Exception as e:
+        print(f"Error reading contract address: {e}")
+
+
+if os.path.exists(CONTRACT_ABI_PATH):
+    try:
+        with open(CONTRACT_ABI_PATH, 'r') as f:
+            contract_abi = json.load(f)
+        contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
+        print(contract)
+        print(f"Contract loaded successfully at address {CONTRACT_ADDRESS}")
+    except Exception as e:
+        print(f"Error loading contract: {e}")
 
 def generate_encryption_key():
     """Generate a random AES key"""
@@ -77,7 +97,7 @@ def available_storage_providers():
     # Filter for nodes with locked storage available
     providers = []
     for node in nodes:
-        if 'locked_mb' in node and node['locked_mb'] > 0:
+        if 'locked_mb' in node and node['locked_mb'] >= 0:
             providers.append({
                 'node_id': node['node_id'],
                 'available_mb': node['locked_mb'],
@@ -90,6 +110,7 @@ def available_storage_providers():
 @app.route('/rent_storage', methods=['POST'])
 def rent_storage():
     """Rent storage from a provider and create a storage agreement"""
+    print("Renting storage...")
     data = request.json
     node_id = data.get('node_id')
     size_mb = data.get('size_mb')
@@ -168,143 +189,148 @@ def rent_storage():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # Check if file is in request
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file in request'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    # Get optional parameters
-    owner = request.form.get('owner', 'anonymous')
-    encryption = request.form.get('encryption', 'aes')
-    agreement_id = request.form.get('agreement_id')  # For rented storage
-    
-    # Save file temporarily
-    temp_path = os.path.join(TEMP_DIR, file.filename)
-    file.save(temp_path)
-    
-    # Generate a file ID
-    file_id = str(uuid.uuid4())
-    
-    # If using rented storage, we need to get the storage node information
-    if agreement_id:
-        # Extract node_id from agreement_id (format is node_id-size_mb)
-        node_id = agreement_id.split('-')[0]
+    try:
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file in request'}), 400
         
-        # Get node information
-        response = requests.get(f'{COORDINATOR_URL}/all_nodes')
-        node_list = [node for node in response.json() if node['node_id'] == node_id]
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
         
-        if not node_list:
-            return jsonify({'error': f'Storage node {node_id} not found'}), 404
+        # Get optional parameters
+        owner = request.form.get('owner', 'anonymous')
+        encryption = request.form.get('encryption', 'aes')
+        agreement_id = request.form.get('agreement_id')  # For rented storage
+        print(f"Owner: {owner}, Encryption: {encryption}, Agreement ID: {agreement_id}")
         
-        # Get encryption key from blockchain
-        if contract and owner != 'anonymous':
-            try:
-                encrypted_key = contract.functions.getEncryptionKey(agreement_id).call({'from': owner})
-                key = base64.b64decode(encrypted_key)
-                encryption = 'aes'  # Force AES encryption for rented storage
-            except Exception as e:
-                return jsonify({'error': f'Failed to get encryption key: {str(e)}'}), 500
-    else:
-        # For regular storage, get available nodes
-        node_list_response = requests.get(f'{COORDINATOR_URL}/available_nodes')
-        if node_list_response.status_code != 200:
-            return jsonify({'error': 'Failed to get available storage nodes'}), 500
+        # Save file temporarily
+        temp_path = os.path.join(TEMP_DIR, file.filename)
+        file.save(temp_path)
         
-        node_list = node_list_response.json()
-        if not node_list:
-            return jsonify({'error': 'No storage nodes available'}), 503
+        # Generate a file ID
+        file_id = str(uuid.uuid4())
         
-        # Generate encryption key if needed
-        key = None
-        if encryption == 'aes':
-            key = generate_encryption_key()
-    
-    # Split file into chunks
-    chunks = split_file_into_chunks(temp_path)
-    file_size = os.path.getsize(temp_path)
-    
-    # Upload each chunk to storage nodes
-    chunk_metadata = []
-    for i, chunk_data in enumerate(chunks):
-        # Select a node using round-robin for regular storage, or specific node for rented storage
-        node = node_list[i % len(node_list)] if not agreement_id else node_list[0]
-        
-        # Encrypt chunk if required
-        if encryption == 'aes' and key:
-            # Convert chunk to JSON string for encryption
-            encrypted_data = encrypt_data(chunk_data, key)
-            chunk_data = encrypted_data.encode('utf-8')
-            encryption_type = 'aes'
+        # If using rented storage, get storage node information
+        if agreement_id:
+            # Extract node_id from agreement_id (format is node_id-size_mb)
+            node_id = agreement_id.split('-')[0]
+            
+            # Get node information
+            response = requests.get(f'{COORDINATOR_URL}/all_nodes')
+            node_list = [node for node in response.json() if node['node_id'] == node_id]
+            
+            if not node_list:
+                return jsonify({'error': f'Storage node {node_id} not found'}), 404
+            
+            # Get encryption key from blockchain
+            if contract and owner != 'anonymous':
+                try:
+                    encrypted_key = contract.functions.getEncryptionKey(agreement_id).call({'from': owner})
+                    key = base64.b64decode(encrypted_key)
+                    encryption = 'aes'  # Force AES encryption for rented storage
+                except Exception as e:
+                    return jsonify({'error': f'Failed to get encryption key: {str(e)}'}), 500
         else:
-            encryption_type = 'none'
+            # For regular storage, get available nodes
+            node_list_response = requests.get(f'{COORDINATOR_URL}/available_nodes')
+            if node_list_response.status_code != 200:
+                return jsonify({'error': 'Failed to get available storage nodes'}), 500
+            
+            node_list = node_list_response.json()
+            if not node_list:
+                return jsonify({'error': 'No storage nodes available'}), 503
+            
+            # Generate encryption key if needed
+            key = None
+            if encryption == 'aes':
+                key = generate_encryption_key()
         
-        # Generate chunk ID
-        chunk_id = hashlib.sha256(chunk_data).hexdigest()
+        # Split file into chunks
+        chunks = split_file_into_chunks(temp_path)
+        file_size = os.path.getsize(temp_path)
         
-        # Upload to node
-        headers = {
-            'X-Owner': owner,
-            'X-File-Id': file_id,
-            'X-Encryption': encryption_type
+        # Upload each chunk to storage nodes
+        chunk_metadata = []
+        for i, chunk_data in enumerate(chunks):
+            # Select a node using round-robin for regular storage, or specific node for rented storage
+            node = node_list[i % len(node_list)] if not agreement_id else node_list[0]
+            
+            # Encrypt chunk if required
+            if encryption == 'aes' and key:
+                # Convert chunk to JSON string for encryption
+                encrypted_data = encrypt_data(chunk_data, key)
+                chunk_data = encrypted_data.encode('utf-8')
+                encryption_type = 'aes'
+            else:
+                encryption_type = 'none'
+            
+            # Generate chunk ID
+            chunk_id = hashlib.sha256(chunk_data).hexdigest()
+            
+            # Upload to node
+            headers = {
+                'X-Owner': owner,
+                'X-File-Id': file_id,
+                'X-Encryption': encryption_type
+            }
+            
+            # If using rented storage, add agreement ID header
+            if agreement_id:
+                headers['X-Agreement-Id'] = agreement_id
+            
+            url = f"{node['url']}/store/{chunk_id}"
+            
+            try:
+                response = requests.post(url, data=chunk_data, headers=headers)
+                if response.status_code == 200:
+                    result = response.json()
+                    chunk_metadata.append({
+                        'chunk_id': chunk_id,
+                        'node_id': result['node_id'],
+                        'node_url': node['url'],
+                        'size': len(chunk_data),
+                        'index': i,
+                        'encryption': encryption_type,
+                        'agreement_id': agreement_id
+                    })
+                else:
+                    return jsonify({'error': f'Failed to upload chunk {i} to node {node["node_id"]}'}), 500
+            except Exception as e:
+                return jsonify({'error': f'Error uploading chunk {i}: {str(e)}'}), 500
+        
+        # Save file metadata to coordinator
+        metadata = {
+            'file_id': file_id,
+            'filename': file.filename,
+            'size': file_size,
+            'chunks': chunk_metadata,
+            'owner': owner,
+            'created_at': time.time(),
+            'encryption': encryption,
+            'agreement_id': agreement_id
         }
         
-        # If using rented storage, add agreement ID header
-        if agreement_id:
-            headers['X-Agreement-Id'] = agreement_id
+        # Store the encryption key if used
+        if key and not agreement_id:  # For regular storage only
+            metadata['key'] = base64.b64encode(key).decode('utf-8')
         
-        url = f"{node['url']}/store/{chunk_id}"
+        response = requests.post(f'{COORDINATOR_URL}/store_file_metadata', json=metadata)
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to store file metadata'}), 500
         
-        try:
-            response = requests.post(url, data=chunk_data, headers=headers)
-            if response.status_code == 200:
-                result = response.json()
-                chunk_metadata.append({
-                    'chunk_id': chunk_id,
-                    'node_id': result['node_id'],
-                    'node_url': node['url'],
-                    'size': len(chunk_data),
-                    'index': i,
-                    'encryption': encryption_type,
-                    'agreement_id': agreement_id
-                })
-            else:
-                return jsonify({'error': f'Failed to upload chunk {i} to node {node["node_id"]}'}), 500
-        except Exception as e:
-            return jsonify({'error': f'Error uploading chunk {i}: {str(e)}'}), 500
+        # Cleanup temp file
+        os.remove(temp_path)
+        
+        return jsonify({
+            'status': 'success',
+            'file_id': file_id,
+            'size': file_size,
+            'chunks': len(chunk_metadata)
+        }), 200
     
-    # Save file metadata to coordinator
-    metadata = {
-        'file_id': file_id,
-        'filename': file.filename,
-        'size': file_size,
-        'chunks': chunk_metadata,
-        'owner': owner,
-        'created_at': time.time(),
-        'encryption': encryption,
-        'agreement_id': agreement_id
-    }
-    
-    # Store the encryption key if used
-    if key and not agreement_id:  # For regular storage only
-        metadata['key'] = base64.b64encode(key).decode('utf-8')
-    
-    response = requests.post(f'{COORDINATOR_URL}/store_file_metadata', json=metadata)
-    if response.status_code != 200:
-        return jsonify({'error': 'Failed to store file metadata'}), 500
-    
-    # Cleanup temp file
-    os.remove(temp_path)
-    
-    return jsonify({
-        'status': 'success',
-        'file_id': file_id,
-        'size': file_size,
-        'chunks': len(chunk_metadata)
-    }), 200
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
 @app.route('/download/<file_id>', methods=['GET'])
 def download_file(file_id):
@@ -464,6 +490,9 @@ def user_agreements():
         return jsonify({'error': 'Smart contract not available'}), 500
     
     try:
+        # Convert wallet address to checksum format
+        wallet_address = Web3.to_checksum_address(wallet_address)
+        
         # Call contract to get user agreements
         agreements = contract.functions.getUserAgreements().call({'from': wallet_address})
         

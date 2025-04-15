@@ -7,44 +7,61 @@ services:
     ports:
       - "8545:8545"
     command: --deterministic --mnemonic "decentralized storage system" --host 0.0.0.0
-
-  # Coordinator service - manages storage nodes and file metadata
-  coordinator:
-    build: ./coordinator
-    ports:
-      - "5001:5001"
-    environment:
-      - BLOCKCHAIN_URL=http://blockchain:8545
     volumes:
-      - coordinator_data:/app/data
-    depends_on:
-      - blockchain
+      - blockchain_data:/data
 
-  # Client API
-  client-api:
-    build: ./client
-    environment:
-      - COORDINATOR_URL=http://coordinator:5001
-      - BLOCKCHAIN_URL=http://blockchain:8545
-    ports:
-      - "5002:5002"
-    volumes:
-      - ./client:/app
-    depends_on:
-      - coordinator
-      - blockchain
+  # Contract deployment service
+  # contract-deployer:
+  #   build: ./contract-deployer
+  #   environment:
+  #     - BLOCKCHAIN_URL=http://blockchain:8545
+  #   volumes:
+  #     - coordinator_data:/app/data
+  #   depends_on:
+  #     - blockchain
 
-  # Web interface
-  web:
-    build: ./web
-    ports:
-      - "3000:3000"
-    environment:
-      - CLIENT_API_URL=http://client-api:5002
-    volumes:
-      - ./web:/app
-    depends_on:
-      - client-api
+  # # Coordinator service - manages storage nodes and file metadata
+  # coordinator:
+  #   build: ./coordinator
+  #   ports:
+  #     - "5001:5001"
+  #   environment:
+  #     - BLOCKCHAIN_URL=http://blockchain:8545
+  #   volumes:
+  #     - coordinator_data:/app/data
+  #   depends_on:
+  #     - blockchain
+  #     - contract-deployer
+
+  # # Client API
+  # client-api:
+  #   build: ./client
+  #   environment:
+  #     - COORDINATOR_URL=http://coordinator:5001
+  #     - BLOCKCHAIN_URL=http://blockchain:8545
+  #     - CONTRACT_ADDRESS_FILE=/app/data/contract_address.txt
+  #   ports:
+  #     - "5002:5002"
+  #   volumes:
+  #     - ./client:/app
+  #     - coordinator_data:/app/data
+  #   depends_on:
+  #     - coordinator
+  #     - blockchain
+  #     - contract-deployer
+
+  # # Web interface
+  # web:
+  #   build: ./web
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - CLIENT_API_URL=http://client-api:5002
+  #   volumes:
+  #     - ./web:/app
+  #   depends_on:
+  #     - client-api
 
 volumes:
   coordinator_data:
+  blockchain_data:

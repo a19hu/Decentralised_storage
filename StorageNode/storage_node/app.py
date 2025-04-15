@@ -37,14 +37,42 @@ WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', '')
 w3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_URL))
 
 # Load contract if ABI is available
-CONTRACT_ABI_PATH = 'contract_abi.json'
-CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS', '')
+CONTRACT_ABI_PATH = os.path.join(os.path.dirname(__file__), 'data', 'contract_abi.json')
+CONTRACT_ADDRESS_FILE = os.getenv('CONTRACT_ADDRESS_FILE', '/app/data/contract_address.txt')
 contract = None
+CONTRACT_ADDRESS = ''
 
+# Create data directory if it doesn't exist
+os.makedirs(os.path.dirname(CONTRACT_ABI_PATH), exist_ok=True)
+
+# Read contract address from file if it exists
+if os.path.exists(CONTRACT_ADDRESS_FILE):
+    try:
+        with open(CONTRACT_ADDRESS_FILE, 'r') as f:
+            CONTRACT_ADDRESS = f.read().strip()
+        print(f"Loaded contract address: {CONTRACT_ADDRESS}")
+    except Exception as e:
+        print(f"Error reading contract address: {e}")
+
+# Copy contract ABI from coordinator if not available
+if not os.path.exists(CONTRACT_ABI_PATH) and CONTRACT_ADDRESS:
+    try:
+        coordinator_abi_path = '/app/data/contract_abi.json'
+        if os.path.exists(coordinator_abi_path):
+            shutil.copy(coordinator_abi_path, CONTRACT_ABI_PATH)
+            print(f"Copied contract ABI from coordinator")
+    except Exception as e:
+        print(f"Error copying contract ABI: {e}")
+
+# Load contract ABI if available
 if os.path.exists(CONTRACT_ABI_PATH) and CONTRACT_ADDRESS:
-    with open(CONTRACT_ABI_PATH, 'r') as f:
-        contract_abi = json.load(f)
-    contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
+    try:
+        with open(CONTRACT_ABI_PATH, 'r') as f:
+            contract_abi = json.load(f)
+        contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
+        print(f"Contract loaded successfully at address {CONTRACT_ADDRESS}")
+    except Exception as e:
+        print(f"Error loading contract: {e}")
 
 # Store file chunk metadata
 CHUNKS_METADATA_FILE = 'chunks_metadata.json'
@@ -312,9 +340,13 @@ def update_used_space():
     used = get_used_space_mb()
     locked = get_locked_space_mb()
     
+    # Get the host IP from environment variable or use localhost
+    host_ip = os.getenv('HOST_IP', 'localhost')
+    port = os.getenv('PORT', '6000')
+    
     res = requests.post(f'{COORDINATOR_URL}/register', json={
         'node_id': NODE_ID,
-        'url': f'http://{os.getenv("HOSTNAME", "localhost")}:6000',
+        'url': f'http://{host_ip}:{port}',
         'limit_mb': STORAGE_LIMIT_MB,
         'used_mb': used,
         'locked_mb': locked,

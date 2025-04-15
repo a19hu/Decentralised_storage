@@ -2,30 +2,19 @@ version: '3'
 
 services:
 
-  # Storage node 1
   storage1:
     build: ./storage_node
     environment:
-      - NODE_ID=node1
+      - NODE_ID=node3
       - STORAGE_LIMIT_MB=1000
       - COORDINATOR_URL=http://172.31.112.248:5001
+      - HOST_IP=172.31.112.248
+      - PORT=6001
+      - WALLET_ADDRESS=0x22e8a7bcf589b82dcc15347f6a3f12a276310da2
     ports:
       - "6001:6000"
     volumes:
       - storage1_data:/app/storage
 
-  # Storage node 2
-  storage2:
-    build: ./storage_node
-    environment:
-      - NODE_ID=node2
-      - STORAGE_LIMIT_MB=1500
-      - COORDINATOR_URL=http://172.31.112.248:5001
-    ports:
-      - "6002:6000"
-    volumes:
-      - storage2_data:/app/storage
-
 volumes:
   storage1_data:
-  storage2_data: 

@@ -209,6 +209,7 @@ function App() {
   };
 
   const handleRentStorage = async (nodeId, sizeMB, durationDays) => {
+    console.log('Renting storage:', nodeId, sizeMB, durationDays);
     try {
       if (!wallet) {
         throw new Error('Wallet connection required');

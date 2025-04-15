@@ -2,31 +2,22 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import json
-from web3 import Web3
 import requests
-
+from web3 import Web3
 app = Flask(__name__)
 CORS(app)
 
-# Configure blockchain connection
-BLOCKCHAIN_URL = os.getenv('BLOCKCHAIN_URL', 'http://blockchain:8545')
-web3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_URL))
+CONTRACT_ABI_PATH ='./data/contract_abi.json'
+CONTRACT_ADDRESS_FILE ='./data/contract_address.txt'
 
-# Load smart contract ABI and address
-CONTRACT_ABI_PATH = os.path.join(os.path.dirname(__file__), 'contract_abi.json')
-CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS', '')
-
-# Ensure data directory exists
 DATA_DIR = './data'
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
 
-# JSON file to store file metadata
 METADATA_FILE = os.path.join(DATA_DIR, 'file_metadata.json')
-# JSON file to store agreements metadata
 AGREEMENTS_FILE = os.path.join(DATA_DIR, 'agreements_metadata.json')
 
-# Initialize metadata storage
+BLOCKCHAIN_URL = os.getenv('BLOCKCHAIN_URL', 'http://localhost:8545')  # Default to localhost if not set
+web3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_URL))
+
 if not os.path.exists(METADATA_FILE):
     with open(METADATA_FILE, 'w') as f:
         json.dump({}, f)
@@ -35,12 +26,25 @@ if not os.path.exists(AGREEMENTS_FILE):
     with open(AGREEMENTS_FILE, 'w') as f:
         json.dump({}, f)
 
-# Load contract if available
 contract = None
-if os.path.exists(CONTRACT_ABI_PATH) and CONTRACT_ADDRESS:
-    with open(CONTRACT_ABI_PATH, 'r') as f:
-        contract_abi = json.load(f)
-    contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
+CONTRACT_ADDRESS = ''
+
+if os.path.exists(CONTRACT_ADDRESS_FILE):
+    try:
+        with open(CONTRACT_ADDRESS_FILE, 'r') as f:
+            CONTRACT_ADDRESS = f.read().strip()
+        print(f"Loaded contract address: {CONTRACT_ADDRESS}")
+    except Exception as e:
+        print(f"Error reading contract address: {e}")
+
+if os.path.exists(CONTRACT_ABI_PATH):
+    try:
+        with open(CONTRACT_ABI_PATH, 'r') as f:
+            contract_abi = json.load(f)
+        contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
+        print(f"Contract loaded successfully at address {CONTRACT_ADDRESS}")
+    except Exception as e:
+        print(f"Error loading contract: {e}")
 
 # Registered storage nodes
 # Format: node_id -> {'url': ..., 'limit_mb': ..., 'used_mb': ...}
@@ -53,7 +57,7 @@ def register():
     url = data.get('url')
     limit_mb = data.get('limit_mb')
     used_mb = data.get('used_mb')
-    locked_mb = data.get('locked_mb', 0)
+    locked_mb = data.get('locked_mb', 100)
     price_per_mb = data.get('price_per_mb', 1)
     wallet_address = data.get('wallet_address', '')
 
