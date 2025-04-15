@@ -63,6 +63,13 @@ def register():
 
     if not node_id or not url:
         return jsonify({'error': 'Missing node_id or url'}), 400
+    
+    # Convert wallet address to checksum format if provided
+    if wallet_address:
+        try:
+            wallet_address = Web3.to_checksum_address(wallet_address)
+        except Exception as e:
+            print(f"Warning: Invalid wallet address provided by {node_id}: {e}")
 
     nodes[node_id] = {
         'node_id': node_id,
@@ -214,9 +221,12 @@ def sync_agreements():
     for node_id, node in nodes.items():
         if 'wallet_address' in node and node['wallet_address']:
             try:
+                # Convert wallet address to checksum format
+                wallet_address = Web3.to_checksum_address(node['wallet_address'])
+                
                 # Get provider agreements
                 provider_agreements = contract.functions.getProviderAgreements(node_id).call({
-                    'from': node['wallet_address']
+                    'from': wallet_address
                 })
                 
                 for agreement in provider_agreements:

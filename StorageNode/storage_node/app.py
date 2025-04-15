@@ -34,10 +34,15 @@ if not os.path.exists(LOCKED_STORAGE_PATH):
 COORDINATOR_URL = os.getenv('COORDINATOR_URL', 'http://coordinator:5001')
 BLOCKCHAIN_URL = os.getenv('BLOCKCHAIN_URL', 'http://blockchain:8545')
 WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
-WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', '')
+# WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', '')
 
 # Initialize Web3
 w3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_URL))
+
+# Convert wallet address to checksum format if provided
+if WALLET_ADDRESS:
+    WALLET_ADDRESS = Web3.to_checksum_address(WALLET_ADDRESS)
+    print(f"Using wallet address: {WALLET_ADDRESS}")
 
 # Load contract if ABI is available
 CONTRACT_ABI_PATH = os.path.join(os.path.dirname(__file__), 'data', 'contract_abi.json')

@@ -144,6 +144,9 @@ def rent_storage():
     total_price = int(price_per_mb) * int(size_mb) * int(duration_days)
     
     try:
+        # Convert wallet address to checksum format
+        wallet_address = Web3.to_checksum_address(wallet_address)
+        
         # Create storage agreement on blockchain
         tx_hash = contract.functions.createStorageAgreement(
             node_id,
@@ -155,7 +158,7 @@ def rent_storage():
             'value': total_price
         })
         
-        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        tx_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
         if tx_receipt.status != 1:
             return jsonify({'error': 'Blockchain transaction failed'}), 500
         
@@ -173,7 +176,7 @@ def rent_storage():
             encrypted_key
         ).transact({'from': wallet_address})
         
-        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        tx_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
         if tx_receipt.status != 1:
             return jsonify({'error': 'Failed to store encryption key'}), 500
         
